@@ -1,5 +1,4 @@
 # Contrastive Lifelong Learning for Anomaly Detection of Breast Cancer
-====
 source code of Contrastive Lifelong Learning for Anomaly Detection of Breast Cancer
 ----
 Requirements
