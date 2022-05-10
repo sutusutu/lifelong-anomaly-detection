@@ -2,16 +2,16 @@ import sys
 import time
 import torch.multiprocessing
 import torch
-import version_4.model.model as model
-import version_4.contrastive.utils as utils
+import model.model as model
+import contrastive.utils as utils
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 import torch.optim as optim
 import torch.nn.functional as F
-from version_4.contrastive.loss import contrastive_loss
-import version_4.dataloader.medical_dataloader as med_data
-from version_4.log import Logger
-import version_4.model.simclr_loss as sim_loss
+from contrastive.loss import contrastive_loss
+
+from log import Logger
+
 
 def get_score(model, train_loader, test_loader):
     # model.eval()
@@ -129,41 +129,18 @@ def one_task_continual_train(pre_center, cur_center ,pre_model, cur_model, task,
             pre_fea_1, pre_z_1, cur_fea_1, cure_z_1, p1 = continual_model(image1)
             pre_fea_2, pre_z_2, cur_fea_2, cure_z_2, p2 = continual_model(image2)
 
-            # pre_fea_1, pre_z_1, cur_fea_1, cure_z_1 = continual_model(image1)
-            # pre_fea_2, pre_z_2, cur_fea_2, cure_z_2 = continual_model(image2)
-
             optimizer.zero_grad()
-            # distill_loss = (
-            #     sim_loss.simclr_distill_loss_func(p1, p2, pre_z_1, pre_z_2, 0.2)
-            #     + sim_loss.simclr_distill_loss_func(pre_z_1, pre_z_2, p1, p2, 0.2)
-            # )/2
 
-
-            # sutu_loss = (torch.mean(1 - F.cosine_similarity(pre_fea_1, cur_fea_1, dim=0))
-            #              + torch.mean(1 - F.cosine_similarity(pre_z_1, cure_z_1, dim=0))
-            #              + torch.mean(1- F.cosine_similarity(pre_fea_2, cur_fea_2, dim=0))
-            #              + torch.mean(1- F.cosine_similarity(pre_z_2, cure_z_2, dim=0))) / 4
-
-
-            # pre_z_1 = pre_z_1 - pre_center
-            # pre_z_2 = pre_z_2 - pre_center
             cure_z_1 = cure_z_1 - center
             cure_z_2 = cure_z_2 - center
-            # pre_shift_loss = contrastive_loss(pre_z_1, pre_z_2)
-            # distill_loss = (contrastive_loss(pre_z_1, p1) + contrastive_loss(pre_z_2, p2))/2
-            # distill_loss = (F.mse_loss(pre_z_1, p1) + F.mse_loss(pre_z_2, p2))/2 + (F.mse_loss(pre_z_1, cure_z_1) +
-            #                                                                         F.mse_loss(pre_z_2, cure_z_2))/2
+
             distill_loss = (F.mse_loss(p1, pre_z_1) + F.mse_loss(p2, pre_z_2)) / 2
-
-            # distill_loss = (F.mse_loss(pre_z_1, cure_z_1) + F.mse_loss(pre_z_2, cure_z_2))/2
-
 
             cur_shift_loss = contrastive_loss(cure_z_1, cure_z_2)
             center_loss = ((cure_z_1 ** 2).sum(dim=1)).mean() + ((cure_z_2 ** 2).sum(dim=1)).mean()
 
 
-            # sum_loss = distill_loss + 0.0 * pre_shift_loss + 0.5 * cur_shift_loss + 0.3 * center_loss + 0.1 * sutu_loss
-            sum_loss = 1 * distill_loss + (cur_shift_loss + center_loss) * 50
+            sum_loss = 1 * distill_loss + (cur_shift_loss + center_loss) * 1
 
             sum_loss.backward()
             optimizer.step()
@@ -212,13 +189,8 @@ def continual_train(train_dataloader_set, train_aug_dataloader_set, test_dataloa
         pre_model = model.init_model()
         print('load pre task_{}_best_acu.pkl'.format(task-1))
         pre_model.load_state_dict(torch.load('task_{}_best_acu.pkl'.format(task-1)))
-        # cur_model = model.init_model()
         pre_model = pre_model.cuda()
-        # cur_model = cur_model.cuda()
         cur_model = None
-        # cur_center, cur_model = init_train(cur_model, train_dataloader_set[task-1], test_dataloader_set[task-1], train_aug_dataloader_set[task-1], lr,
-        #                         epochs[task-1], task)
-
         _, pre_center = one_task_continual_train(pre_center, None, pre_model, cur_model, task, lr[task-1], epochs[task-1], train_dataloader_set[task-1],
                                  train_aug_dataloader_set[task-1], test_dataloader_set[task-1])
         print('testing continual learning......')
@@ -243,63 +215,31 @@ if __name__ == '__main__':
     test_dataloader_set = []
     batch_size = 32
 
-    sys.stdout = Logger('./exp20_cifar10_cifar100_transformer_weigth.txt')
+    sys.stdout = Logger('./exp_cifar10_cifar100.txt')
     print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
     print('starting process get dataloader.......')
 
-    # medical_path1_train = r'D:\医学数据集\breast\BACH\train_test\train'
-    # medical_path2_train = r'D:\医学数据集\breast\BreaKHis_v1\train_test\train'
-    # # medical_path3_train = r'D:\医学数据集\breast\Dataset_BUSI_with_GT\train_test\train'
-    #
-    # medical_path1_test = r'D:\医学数据集\breast\BACH\train_test\test'
-    # medical_path2_test = r'D:\医学数据集\breast\BreaKHis_v1\train_test\test'
-    # # medical_path3_test = r'D:\医学数据集\breast\Dataset_BUSI_with_GT\train_test\test'
-    #
-    # train_path1_dataloader1, train_path1_dataloader2 = med_data.get_train_dataset(medical_path1_train,
-    #                                                                               batch_size=batch_size)
-    # test_path1_dataloader = med_data.get_test_dataset(medical_path1_test, batch_size=batch_size)
 
-    import version_4.dataloader.utils1 as cifar_utils
+
+
+    import dataloader.utils1 as cifar_utils
     train_path1_dataloader1,  test_path1_dataloader ,train_path1_dataloader2 = cifar_utils.get_loaders('cifar10', 0, 32)
 
     train_path2_dataloader1, test_path2_dataloader, train_path2_dataloader2 = cifar_utils.get_cifar100_loaders('cifar100', 0, 32)
 
-    # train_path2_dataloader1, train_path2_dataloader2 = med_data.get_train_dataset(medical_path2_train,
-    #                                                                               batch_size=batch_size)
-    # test_path2_dataloader = med_data.get_test_dataset(medical_path2_test, batch_size=batch_size)
 
-
-
-    # train_path3_dataloader1, train_path3_dataloader2 = med_data.get_train_dataset(medical_path3_train,
-                                                                                  # batch_size=batch_size)
-    # test_path3_dataloader = med_data.get_test_dataset(medical_path3_test, batch_size=batch_size)
     train_dataloader_set.append(train_path1_dataloader1)
     train_dataloader_set.append(train_path2_dataloader1)
 
-
-
-
-    # train_dataloader_set.append(train_path3_dataloader1)
     train_aug_dataloader_set.append(train_path1_dataloader2)
     train_aug_dataloader_set.append(train_path2_dataloader2)
-
-
-
-    # train_aug_dataloader_set.append(train_path3_dataloader2)
     test_dataloader_set.append(test_path1_dataloader)
     test_dataloader_set.append(test_path2_dataloader)
-
-
-
-    # test_dataloader_set.append(test_path3_dataloader)
-
-
 
 
     print('Ending process get dataloader.......')
     print('starting process training.......')
     print('lr=:{}-{}'.format(0.0002, 0.0002))
-    print('predictor use transformer dis cifar10, cifar100 , 1:50')
     print('task: bach, break')
     continual_train(train_dataloader_set, train_aug_dataloader_set, test_dataloader_set, epochs=[100, 100], lr=[0.0002, 0.0002],
                     all_task=2)
